@@ -857,7 +857,8 @@ struct ion_flag_data {
  */
 #define ION_IOC_CLEAN_CACHES	_IOWR(ION_IOC_MAGIC, 20, \
 						struct ion_flush_data)
-#define ION_IOC_CLEAN_CACHES_V30_COMPAT	_IOWR(ION_IOC_MAGIC, 7, \
+
+#define ION_IOC_CLEAN_CACHES_COMPAT	_IOWR(ION_IOC_MAGIC, 7, \
 						struct ion_flush_data)
 /**
  * DOC: ION_MSM_IOC_INV_CACHES - invalidate the caches
@@ -866,8 +867,10 @@ struct ion_flag_data {
  */
 #define ION_IOC_INV_CACHES	_IOWR(ION_IOC_MAGIC, 21, \
 						struct ion_flush_data)
-#define ION_IOC_INV_CACHES_V30_COMPAT	_IOWR(ION_IOC_MAGIC, 8, \
+
+#define ION_IOC_INV_CACHES_COMPAT	_IOWR(ION_IOC_MAGIC, 8, \
 						struct ion_flush_data)
+
 /**
  * DOC: ION_MSM_IOC_CLEAN_CACHES - clean and invalidate the caches
  *
@@ -876,8 +879,9 @@ struct ion_flag_data {
 #define ION_IOC_CLEAN_INV_CACHES	_IOWR(ION_IOC_MAGIC, 22, \
 						struct ion_flush_data)
 
-#define ION_IOC_CLEAN_INV_CACHES_V30_COMPAT	_IOWR(ION_IOC_MAGIC, 9, \
+#define ION_IOC_CLEAN_INV_CACHES_COMPAT	_IOWR(ION_IOC_MAGIC, 9, \
 						struct ion_flush_data)
+
 /**
  * DOC: ION_IOC_GET_FLAGS - get the flags of the handle
  *
@@ -886,6 +890,7 @@ struct ion_flag_data {
  */
 #define ION_IOC_GET_FLAGS		_IOWR(ION_IOC_MAGIC, 23, \
 						struct ion_flag_data)
-#define ION_IOC_GET_FLAGS_V30_COMPAT		_IOWR(ION_IOC_MAGIC, 10, \
+
+#define ION_IOC_GET_FLAGS_COMPAT		_IOWR(ION_IOC_MAGIC, 10, \
 						struct ion_flag_data)
 #endif /* _LINUX_ION_H */
