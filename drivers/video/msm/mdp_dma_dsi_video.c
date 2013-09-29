@@ -1,5 +1,4 @@
-/*
- * Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -27,6 +26,7 @@
 #include "mdp.h"
 #include "msm_fb.h"
 #include "mdp4.h"
+#include "mipi_dsi.h"
 
 #define DSI_VIDEO_BASE	0xF0000
 #define DMA_P_BASE      0x90000
@@ -88,8 +88,6 @@ int mdp_dsi_video_on(struct platform_device *pdev)
 	var = &fbi->var;
 
 	vsync_cntrl.dev = mfd->fbi->dev;
-	atomic_set(&vsync_cntrl.suspend, 0);
-	vsync_cntrl.vsync_irq_enabled = 0;
 	bpp = fbi->var.bits_per_pixel / 8;
 	buf = (uint8 *) fbi->fix.smem_start;
 
@@ -131,6 +129,7 @@ int mdp_dsi_video_on(struct platform_device *pdev)
 	}
 	/* MDP cmd block enable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+
 
 	/* starting address */
 	MDP_OUTP(MDP_BASE + DMA_P_BASE + 0x8, (uint32) buf);
@@ -195,6 +194,13 @@ int mdp_dsi_video_on(struct platform_device *pdev)
 	ctrl_polarity =	(data_en_polarity << 2) |
 		(vsync_polarity << 1) | (hsync_polarity);
 
+	if (!(mfd->cont_splash_done)) {
+		mdp_pipe_ctrl(MDP_CMD_BLOCK,
+			MDP_BLOCK_POWER_OFF, FALSE);
+		MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE, 0);
+		mipi_dsi_controller_cfg(0);
+	}
+
 	MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE + 0x4, hsync_ctrl);
 	MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE + 0x8, vsync_period);
 	MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE + 0xc, vsync_pulse_width);
@@ -216,7 +222,7 @@ int mdp_dsi_video_on(struct platform_device *pdev)
 		/*Turning on DMA_P block*/
 		mdp_pipe_ctrl(MDP_DMA2_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 	}
-	mdp_histogram_ctrl_all(TRUE);
+
 	/* MDP cmd block disable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
@@ -226,7 +232,6 @@ int mdp_dsi_video_on(struct platform_device *pdev)
 int mdp_dsi_video_off(struct platform_device *pdev)
 {
 	int ret = 0;
-	mdp_histogram_ctrl_all(FALSE);
 	/* MDP cmd block enable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 	MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE, 0);

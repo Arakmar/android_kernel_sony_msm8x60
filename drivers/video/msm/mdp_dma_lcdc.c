@@ -1,6 +1,4 @@
-/*
- * Copyright (c) 2008-2009, 2012-2013 The Linux Foundation. All rights
- * reserved.
+/* Copyright (c) 2008-2009, 2012 Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -108,8 +106,6 @@ int mdp_lcdc_on(struct platform_device *pdev)
 	fbi = mfd->fbi;
 	var = &fbi->var;
 	vsync_cntrl.dev = mfd->fbi->dev;
-	atomic_set(&vsync_cntrl.suspend, 0);
-	vsync_cntrl.vsync_irq_enabled = 0;
 
 	/* MDP cmd block enable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
@@ -254,6 +250,12 @@ int mdp_lcdc_on(struct platform_device *pdev)
 	ctrl_polarity =
 	    (data_en_polarity << 2) | (vsync_polarity << 1) | (hsync_polarity);
 
+	if (!(mfd->cont_splash_done)) {
+		mdp_pipe_ctrl(MDP_CMD_BLOCK,
+			MDP_BLOCK_POWER_OFF, FALSE);
+		MDP_OUTP(MDP_BASE + timer_base, 0);
+	}
+
 	MDP_OUTP(MDP_BASE + timer_base + 0x4, hsync_ctrl);
 	MDP_OUTP(MDP_BASE + timer_base + 0x8, vsync_period);
 	MDP_OUTP(MDP_BASE + timer_base + 0xc, vsync_pulse_width * hsync_period);
@@ -287,10 +289,8 @@ int mdp_lcdc_on(struct platform_device *pdev)
 		MDP_OUTP(MDP_BASE + timer_base, 1);
 		mdp_pipe_ctrl(block, MDP_BLOCK_POWER_ON, FALSE);
 	}
-	mdp_histogram_ctrl_all(TRUE);
 	/* MDP cmd block disable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
-
 
 	return ret;
 }
@@ -310,7 +310,6 @@ int mdp_lcdc_off(struct platform_device *pdev)
 		timer_base = DTV_BASE;
 	}
 #endif
-	mdp_histogram_ctrl_all(FALSE);
 
 	down(&mfd->dma->mutex);
 	/* MDP cmd block enable */

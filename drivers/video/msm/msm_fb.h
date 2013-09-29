@@ -1,4 +1,5 @@
 /* Copyright (c) 2008-2013, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -23,7 +24,6 @@
 #include "linux/proc_fs.h"
 
 #include <mach/hardware.h>
-#include <mach/msm_subsystem_map.h>
 #include <linux/io.h>
 #include <mach/board.h>
 
@@ -38,6 +38,7 @@
 #include <linux/fb.h>
 #include <linux/list.h>
 #include <linux/types.h>
+
 #include <linux/msm_mdp.h>
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
@@ -49,7 +50,6 @@
 #define MSM_FB_DEFAULT_PAGE_SIZE 2
 #define MFD_KEY  0x11161126
 #define MSM_FB_MAX_DEV_LIST 32
-#define MDP_MAX_CACHED_REG 128
 
 struct disp_info_type_suspend {
 	boolean op_enable;
@@ -82,8 +82,8 @@ struct msm_fb_data_type {
 	DISP_TARGET dest;
 	struct fb_info *fbi;
 
+	struct device *dev;
 	boolean op_enable;
-	struct delayed_work backlight_worker;
 	uint32 fb_imgType;
 	boolean sw_currently_refreshing;
 	boolean sw_refreshing_enable;
@@ -128,7 +128,6 @@ struct msm_fb_data_type {
 	__u32 channel_irq;
 
 	struct mdp_dma_data *dma;
-	struct device_attribute dev_attr;
 	void (*dma_fnc) (struct msm_fb_data_type *mfd);
 	int (*cursor_update) (struct fb_info *info,
 			      struct fb_cursor *cursor);
@@ -139,7 +138,7 @@ struct msm_fb_data_type {
 	int (*start_histogram) (struct mdp_histogram_start_req *req);
 	int (*stop_histogram) (struct fb_info *info, uint32_t block);
 	void (*vsync_ctrl) (int enable);
-	void (*vsync_init) (int cndx);
+	void (*vsync_init) (int cndx, struct msm_fb_data_type *mfd);
 	void (*update_panel_info)(struct msm_fb_data_type *mfd);
 	bool (*is_panel_ready)(void);
 	void *vsync_show;
@@ -195,27 +194,29 @@ struct msm_fb_data_type {
 	u32 writeback_state;
 	bool writeback_active_cnt;
 	int cont_splash_done;
+#if defined(CONFIG_FB_MSM_RECOVER_PANEL) || defined(CONFIG_DEBUG_FS)
+	struct mutex power_lock;
+#endif
+#ifdef CONFIG_FB_MSM_RECOVER_PANEL
+	struct mutex nvrw_prohibit_draw;
+#endif
 	u32 acq_fen_cnt;
 	struct sync_fence *acq_fen[MDP_MAX_FENCE_FD];
+	int cur_rel_fen_fd;
+	struct sync_pt *cur_rel_sync_pt;
+	struct sync_fence *cur_rel_fence;
+	struct sync_fence *last_rel_fence;
 	struct sw_sync_timeline *timeline;
 	int timeline_value;
+	u32 last_acq_fen_cnt;
+	struct sync_fence *last_acq_fen[MDP_MAX_FENCE_FD];
 	struct mutex sync_mutex;
-	struct mutex queue_mutex;
 	struct completion commit_comp;
 	u32 is_committing;
-	atomic_t commit_cnt;
-	struct task_struct *commit_thread;
-	wait_queue_head_t commit_queue;
-	int wake_commit_thread;
+	struct work_struct commit_work;
 	void *msm_fb_backup;
 	boolean panel_driver_on;
-	int vsync_sysfs_created;
-	void *cpu_pm_hdl;
-	struct mdp_table_entry cached_reg[MDP_MAX_CACHED_REG];
-	uint32 cached_reg_cnt;
-	uint32 cache_reg_en;
 };
-
 struct msm_fb_backup_type {
 	struct fb_info info;
 	struct mdp_display_commit disp_commit;
@@ -241,13 +242,12 @@ int calc_fb_offset(struct msm_fb_data_type *mfd, struct fb_info *fbi, int bpp);
 void msm_fb_wait_for_fence(struct msm_fb_data_type *mfd);
 int msm_fb_signal_timeline(struct msm_fb_data_type *mfd);
 void msm_fb_release_timeline(struct msm_fb_data_type *mfd);
-void msm_fb_release_busy(struct msm_fb_data_type *mfd);
-
 #ifdef CONFIG_FB_BACKLIGHT
 void msm_fb_config_backlight(struct msm_fb_data_type *mfd);
 #endif
 
-void fill_black_screen(bool on, uint8 pipe_num, uint8 mixer_num);
+void fill_black_screen(void);
+void unfill_black_screen(void);
 int msm_fb_check_frame_rate(struct msm_fb_data_type *mfd,
 				struct fb_info *info);
 
