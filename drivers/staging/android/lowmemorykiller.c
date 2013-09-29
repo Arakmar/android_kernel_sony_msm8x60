@@ -18,6 +18,7 @@
  * and processes may not get killed until the normal oom killer is triggered.
  *
  * Copyright (C) 2007-2008 Google, Inc.
+ * Copyright (C) 2012 Sony Mobile Communications AB.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -42,38 +43,32 @@
 #include <linux/delay.h>
 #include <linux/ktime.h>
 #include <linux/spinlock.h>
-#include <linux/fs.h>
-#include <linux/writeback.h>
-#include <linux/swap.h>
-#include <linux/hardirq.h>
-
-extern void drop_pagecache_sb(struct super_block *sb, void *unused);
 
 static uint32_t lowmem_debug_level = 1;
 static int lowmem_adj[6] = {
-	0, 58, 176, 294, 411, 529
+	0,
+	1,
+	6,
+	12,
 };
-
-static long sleep_intervel[6] = {
-	4,	4,	3,	2,	0,	0
+static int lowmem_adj_size = 4;
+static int lowmem_minfree[6] = {
+	3 * 512,	/* 6MB */
+	2 * 1024,	/* 8MB */
+	4 * 1024,	/* 16MB */
+	16 * 1024,	/* 64MB */
 };
 static int lowmem_minfree_size = 4;
 static int lmk_fast_run = 1;
 
-static int lowmem_minfree[6] = {
-	9*256-21, 14*256+1, 23*256+1, 31*256+1, 41*256+1, 51*256+1
-};
-static int lowmem_minfree_size = 6;
-static long shrink_batch = 10*256;
 static ktime_t lowmem_deathpending_timeout;
 
 #define LMK_BUSY (-1)
-#define LMK_LOG_TAG "lowmem_shrink "
 
 #define lowmem_print(level, x...)			\
 	do {						\
 		if (lowmem_debug_level >= (level))	\
-			printk(LMK_LOG_TAG x);			\
+			printk(x);			\
 	} while (0)
 
 static int test_task_flag(struct task_struct *p, int flag)
@@ -235,7 +230,6 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	struct task_struct *tsk;
 	struct task_struct *selected = NULL;
 	int rem = 0;
-	int pages_can_free = 0;
 	static int same_count;
 	static int busy_count;
 	static int busy_count_dropped;
@@ -243,8 +237,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	static int lastpid;
 	static ktime_t next_busy_print;
 	int tasksize;
-	int adj_index;
-	long sleep_time = -1;
+	int i;
 	int min_score_adj = OOM_SCORE_ADJ_MAX + 1;
 	int selected_tasksize = 0;
 	int selected_oom_score_adj;
@@ -367,21 +360,6 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			task_unlock(p);
 			continue;
 		}
-		if (pick_task_runtime) {
-			long time_tmp = p->real_start_time.tv_sec;
-			lowmem_print(5, "ignchk task %d (%s) \
-run time %ld secs, threshold %ld secs, adj %d\n",
-				p->pid, p->comm, time_tmp,
-				pick_task_runtime, oom_score_adj);
-			if (time_tmp < pick_task_runtime) {
-				lowmem_print(3, "ignore task %d(%s) \
-run time %ld, oom_score_adj %d\n", p->pid,
-				p->comm, time_tmp, oom_score_adj);
-				task_unlock(p);
-				continue;
-			}
-		}
-
 		tasksize = get_mm_rss(p->mm);
 		task_unlock(p);
 		if (tasksize <= 0)
@@ -396,20 +374,20 @@ run time %ld, oom_score_adj %d\n", p->pid,
 		selected = p;
 		selected_tasksize = tasksize;
 		selected_oom_score_adj = oom_score_adj;
-		lowmem_print(3, "selected %d (%s), adj %d, \
-size %d, to kill\n", p->pid, p->comm,
-			oom_score_adj, tasksize);
+		lowmem_print(4, "select %d (%s), adj %d, size %d, to kill\n",
+			     p->pid, p->comm, oom_score_adj, tasksize);
 	}
 	if (selected) {
-		lowmem_print(1, "send sigkill to %d (%s), \
-index %d, adj %d, size %d\n", selected->pid, selected->comm,
-		adj_index, selected_oom_score_adj, selected_tasksize);
+		lowmem_print(1, "send sigkill to %d (%s), adj %d, size %d\n",
+			     selected->pid, selected->comm,
+			     selected_oom_score_adj, selected_tasksize);
 		send_sig(SIGKILL, selected, 0);
 
 		lowmem_deathpending_timeout = ktime_add_ns(ktime_get(),
 							   NSEC_PER_SEC/2);
-		lowmem_print(4, "selected state:%ld flag:0x%x \
-busy:%d %d\n", selected->state, selected->flags,
+		lowmem_print(2, "state:%ld flag:0x%x la:%lld busy:%d %d\n",
+			     selected->state, selected->flags,
+			     selected->sched_info.last_arrival,
 			     busy_count, oom_killer_disabled);
 		lastpid = selected->pid;
 		set_tsk_thread_flag(selected, TIF_MEMDIE);
@@ -428,8 +406,7 @@ busy:%d %d\n", selected->state, selected->flags,
 
 static struct shrinker lowmem_shrinker = {
 	.shrink = lowmem_shrink,
-	.seeks = DEFAULT_SEEKS * 16,
-	.batch = 10*256
+	.seeks = DEFAULT_SEEKS * 16
 };
 
 static int __init lowmem_init(void)
@@ -473,12 +450,12 @@ static void lowmem_autodetect_oom_adj_values(void)
 	if (oom_score_adj <= OOM_ADJUST_MAX)
 		return;
 
-	lowmem_print(2, "convert oom_adj to oom_score_adj:\n");
+	lowmem_print(1, "lowmem_shrink: convert oom_adj to oom_score_adj:\n");
 	for (i = 0; i < array_size; i++) {
 		oom_adj = lowmem_adj[i];
 		oom_score_adj = lowmem_oom_adj_to_oom_score_adj(oom_adj);
 		lowmem_adj[i] = oom_score_adj;
-		lowmem_print(2, "oom_adj %d => oom_score_adj %d\n",
+		lowmem_print(1, "oom_adj %d => oom_score_adj %d\n",
 			     oom_adj, oom_score_adj);
 	}
 }
@@ -519,20 +496,6 @@ static const struct kparam_array __param_arr_adj = {
 	.elem = lowmem_adj,
 };
 #endif
-
-static int set_shrink_batch(const char *val, struct kernel_param *kp)
-{
-	int ret;
-
-	ret = param_set_long(val, kp);
-	if (shrink_batch > 127 && shrink_batch < 8192) {
-		lowmem_print(2, "batch %ld => %ld\n",
-				 lowmem_shrinker.batch, shrink_batch);
-		lowmem_shrinker.batch = shrink_batch;
-	}
-
-	return ret;
-}
 
 module_param_named(cost, lowmem_shrinker.seeks, int, S_IRUGO | S_IWUSR);
 #ifdef CONFIG_ANDROID_LOW_MEMORY_KILLER_AUTODETECT_OOM_ADJ_VALUES
