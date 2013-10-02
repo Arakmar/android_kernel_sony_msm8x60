@@ -248,7 +248,7 @@ int msm_rotator_iommu_map_buf(int mem_id, unsigned char src,
 
 	*pihdl = ion_import_dma_buf(msm_rotator_dev->client, mem_id);
 	if (IS_ERR_OR_NULL(*pihdl)) {
-		pr_err("ion_import_fd() failed\n");
+		pr_err("ion_import_dma_buf() failed\n");
 		return PTR_ERR(*pihdl);
 	}
 
@@ -1268,7 +1268,6 @@ static void put_img(struct file *p_file, struct ion_handle *p_ihdl,
 	if (p_file != NULL)
 		put_pmem_file(p_file);
 #endif
-
 #ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
 	if (!IS_ERR_OR_NULL(p_ihdl)) {
 		int domain;
