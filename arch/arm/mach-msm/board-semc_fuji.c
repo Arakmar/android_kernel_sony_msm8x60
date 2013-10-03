@@ -134,7 +134,7 @@
 #include "pm-boot.h"
 #include "board-storage-common-a.h"
 
-#include <linux/msm_ion.h>
+#include <linux/ion.h>
 #include <mach/ion.h>
 #include <mach/msm_rtb.h>
 
@@ -4359,7 +4359,6 @@ static struct ion_platform_data ion_pdata = {
 			.size	= MSM_ION_MM_SIZE,
 			.memory_type = ION_SMI_TYPE,
 			.extra_data = (void *) &cp_mm_ion_pdata,
-			.priv  = &ion_mm_heap_device.dev,
 		},
 		{
 			.id     = ION_MM_FIRMWARE_HEAP_ID,
