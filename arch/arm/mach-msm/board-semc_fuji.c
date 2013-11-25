@@ -24,6 +24,9 @@
 #include <linux/leds.h>
 #include <linux/pmic8058-othc.h>
 #include <linux/bootmem.h>
+//added from blue
+#include <mach/kgsl.h>
+//end of adding
 #include <linux/msm_adc.h>
 #include <linux/m_adcproc.h>
 #include <linux/mfd/marimba.h>
@@ -131,7 +134,7 @@
 #include "pm-boot.h"
 #include "board-storage-common-a.h"
 
-#include <linux/ion.h>
+#include <linux/msm_ion.h>
 #include <mach/ion.h>
 #include <mach/msm_rtb.h>
 
@@ -2413,7 +2416,7 @@ unsigned char hdmi_is_primary;
 #define MSM_FB_OVERLAY1_WRITEBACK_SIZE (0)
 #endif  /* CONFIG_FB_MSM_OVERLAY1_WRITEBACK */
 
-#define MSM_PMEM_KERNEL_EBI1_SIZE  0x3BC000
+#define MSM_CONTIG_MEM_SIZE  0x3BC000
 #define MSM_PMEM_ADSP_SIZE         0x4200000
 #define MSM_PMEM_CAMERA_SIZE       0x5000000
 #define MSM_PMEM_AUDIO_SIZE        0x4CF000
@@ -2490,13 +2493,13 @@ static int __init fb_size_setup(char *p)
 }
 early_param("fb_size", fb_size_setup);
 
-static unsigned pmem_kernel_ebi1_size = MSM_PMEM_KERNEL_EBI1_SIZE;
-static int __init pmem_kernel_ebi1_size_setup(char *p)
+static unsigned msm_contig_mem_size = MSM_CONTIG_MEM_SIZE;
+static int __init msm_contig_mem_size_setup(char *p)
 {
-	pmem_kernel_ebi1_size = memparse(p, NULL);
+	msm_contig_mem_size = memparse(p, NULL);
 	return 0;
 }
-early_param("pmem_kernel_ebi1_size", pmem_kernel_ebi1_size_setup);
+early_param("msm_contig_mem_size", msm_contig_mem_size_setup);
 
 #ifdef CONFIG_ANDROID_PMEM
 static unsigned pmem_sf_size = MSM_PMEM_SF_SIZE;
@@ -4531,7 +4534,7 @@ static void __init reserve_pmem_memory(void)
 	reserve_memory_for(&android_pmem_audio_pdata);
 #endif /*CONFIG_MSM_MULTIMEDIA_USE_ION*/
 	reserve_memory_for(&android_pmem_tzcom_pdata);
-	msm8x60_reserve_table[MEMTYPE_EBI1].size += pmem_kernel_ebi1_size;
+	msm8x60_reserve_table[MEMTYPE_EBI1].size += msm_contig_mem_size;
 #endif /*CONFIG_ANDROID_PMEM*/
 }
 
@@ -7808,8 +7811,8 @@ static struct msm_panel_common_pdata mdp_pdata = {
 	.gpio = MDP_VSYNC_GPIO,
 	.mdp_max_clk = 200000000,
 	.mdp_max_bw = 2000000000,
-	.mdp_bw_ab_factor = 115,
-	.mdp_bw_ib_factor = 150,
+	.mdp_bw_ab_factor = 200,
+	.mdp_bw_ib_factor = 210,
 #ifdef CONFIG_MSM_BUS_SCALING
 	.mdp_bus_scale_table = &mdp_bus_scale_pdata,
 #endif
