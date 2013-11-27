@@ -407,6 +407,10 @@ static int msm_fb_probe(struct platform_device *pdev)
 
 	bf_supported = mdp4_overlay_borderfill_supported();
 
+	/* don't move below */
+	if (mfd->vsync_init != NULL)
+		mfd->vsync_init(0);
+
 	rc = msm_fb_register(mfd);
 	if (rc)
 		return rc;
@@ -1079,7 +1083,7 @@ static void msm_fb_imageblit(struct fb_info *info, const struct fb_image *image)
 static int msm_fb_blank(int blank_mode, struct fb_info *info)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
-	//int ret;
+	int ret;
 
 	if (blank_mode == FB_BLANK_POWERDOWN) {
 		struct fb_event event;
@@ -1509,6 +1513,16 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 	}
 */
 
+/* FIXME: check if write domain needs to be mapped
+	msm_iommu_map_contig_buffer(fbi->fix.smem_start,
+					DISPLAY_WRITE_DOMAIN,
+					GEN_POOL,
+					fbi->fix.smem_len,
+					SZ_4K,
+					0,
+					&(mfd->display_iova));
+*/
+
 	msm_iommu_map_contig_buffer(fbi->fix.smem_start,
 					DISPLAY_READ_DOMAIN,
 					GEN_POOL,
@@ -1533,10 +1547,22 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 
 	/* cursor memory allocation */
 	if (mfd->cursor_update) {
+		unsigned long cursor_buf_iommu = 0;
 		mfd->cursor_buf = dma_alloc_coherent(NULL,
 					MDP_CURSOR_SIZE,
 					(dma_addr_t *) &mfd->cursor_buf_phys,
 					GFP_KERNEL);
+
+		msm_iommu_map_contig_buffer((unsigned long)mfd->cursor_buf_phys,
+					    DISPLAY_READ_DOMAIN,
+					    GEN_POOL,
+					    MDP_CURSOR_SIZE,
+					    SZ_4K,
+					    0,
+					    &cursor_buf_iommu);
+		if (cursor_buf_iommu)
+			mfd->cursor_buf_phys = (void *)cursor_buf_iommu;
+
 		if (!mfd->cursor_buf)
 			mfd->cursor_update = 0;
 	}
@@ -3260,12 +3286,10 @@ static int msmfb_overlay_play_wait(struct fb_info *info, unsigned long *argp)
 	return ret;
 }
 
-/*
 static int msmfb_overlay_commit(struct fb_info *info)
 {
 	return mdp4_overlay_commit(info);
 }
-*/
 
 static int msmfb_overlay_play(struct fb_info *info, unsigned long *argp)
 {
