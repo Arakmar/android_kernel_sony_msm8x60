@@ -13,6 +13,7 @@
 #include <linux/msm_ion.h>
 #include <mach/msm_memtypes.h>
 #include "vcd_ddl.h"
+#include "vcd_ddl_api.h"
 #include "vcd_ddl_shared_mem.h"
 #include "vcd_res_tracker_api.h"
 
@@ -252,9 +253,10 @@ u32 ddl_decoder_dpb_init(struct ddl_client_context *ddl)
 	struct ddl_context *ddl_context = ddl->ddl_context;
 	struct ddl_decoder_data *decoder = &ddl->codec_data.decoder;
 	struct ddl_dec_buffers *dec_buffers = &decoder->hw_bufs;
-	struct vcd_frame_data *vcd_frm;
+	struct ddl_frame_data_tag *frame;
 	u32 luma[DDL_MAX_BUFFER_COUNT], chroma[DDL_MAX_BUFFER_COUNT];
 	u32 mv[DDL_MAX_BUFFER_COUNT], luma_size, i, dpb;
+	frame = &decoder->dp_buf.dec_pic_buffers[0];
 	luma_size = ddl_get_yuv_buf_size(decoder->frame_size.width,
 			decoder->frame_size.height, DDL_YUV_BUF_TYPE_TILE);
 	dpb = decoder->dp_buf.no_of_dec_pic_buf;
@@ -263,47 +265,32 @@ u32 ddl_decoder_dpb_init(struct ddl_client_context *ddl)
 	if (dpb > DDL_MAX_BUFFER_COUNT)
 		dpb = DDL_MAX_BUFFER_COUNT;
 	for (i = 0; i < dpb; i++) {
-		vcd_frm = &decoder->dp_buf.dec_pic_buffers[i].vcd_frm;
-		if (!res_trk_check_for_sec_session()) {
-			u8 *kernel_vaddr = NULL;
-			if (luma_size <= vcd_frm->alloc_len) {
-				kernel_vaddr = (u8 *)ion_map_kernel(
-						ddl_context->video_ion_client,
-						vcd_frm->buff_ion_handle);
-				if (IS_ERR_OR_NULL(kernel_vaddr)) {
-					DDL_MSG_ERROR("%s(): ION_MAP for "\
-					"DPB[%u] failed\n", __func__, i);
-				} else {
-					memset(kernel_vaddr, 0x10101010,
-						luma_size);
-					memset(kernel_vaddr + luma_size,
-						0x80808080,
-						vcd_frm->alloc_len - luma_size);
-					if (vcd_frm->ion_flag ==
-						ION_FLAG_CACHED) {
-						msm_ion_do_cache_op(
-						ddl_context->video_ion_client,
-						vcd_frm->buff_ion_handle,
-						(unsigned long *)kernel_vaddr,
-						(unsigned long)vcd_frm->
-						alloc_len,
-						ION_IOC_CLEAN_INV_CACHES);
-					}
-					ion_unmap_kernel(
-						ddl_context->video_ion_client,
-						vcd_frm->buff_ion_handle);
-					kernel_vaddr = NULL;
-				}
+		if (!(res_trk_check_for_sec_session()) &&
+                        frame[i].vcd_frm.virtual) {
+			if (luma_size <= frame[i].vcd_frm.alloc_len) {
+                                memset(frame[i].vcd_frm.virtual,
+                                         0x10101010, luma_size);
+                                memset(frame[i].vcd_frm.virtual + luma_size,
+                                         0x80808080,
+                                        frame[i].vcd_frm.alloc_len - luma_size);
+                                if (frame[i].vcd_frm.ion_flag == CACHED) {
+                                        msm_ion_do_cache_op(
+                                        ddl_context->video_ion_client,
+                                        frame[i].vcd_frm.buff_ion_handle,
+                                        (unsigned long *)frame[i].
+                                        vcd_frm.virtual,
+                                        (unsigned long)frame[i].
+                                        vcd_frm.alloc_len,
+                                        ION_IOC_CLEAN_INV_CACHES);
+                                }
 			} else {
-				DDL_MSG_ERROR("%s: err: luma_size (%u), "\
-					"alloc_len (%u)", __func__,
-					luma_size, vcd_frm->alloc_len);
+				DDL_MSG_ERROR("luma size error");
 				return VCD_ERR_FAIL;
 			}
 		}
 
 		luma[i] = DDL_OFFSET(ddl_context->dram_base_a.
-			align_physical_addr, vcd_frm->physical);
+			align_physical_addr, frame[i].vcd_frm.physical);
 		chroma[i] = luma[i] + luma_size;
 		DDL_MSG_LOW("%s: Decoder Luma address = %x Chroma address = %x",
 					__func__, luma[i], chroma[i]);
